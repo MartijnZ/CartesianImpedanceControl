@@ -1,2 +1,2 @@
-# CartesianImpedanceControl
-XBotCore plugin for cartesian impedance control
+CartesianImpedanceControl
+===============
