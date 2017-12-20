@@ -26,12 +26,24 @@
 #include <kdl/frames.hpp>
 #include <kdl/jacobian.hpp>
 #include <kdl/frames_io.hpp>
+#include <cmath>
 #include <eigen_conversions/eigen_kdl.h>
 #include "ros/ros.h"
+
+#define PI 3.14159265
 
 using namespace Eigen;
 
 namespace XBotPlugin {
+
+enum EControlMode{
+    Idle,
+    GravityCompensate,
+    Impedance
+};
+
+
+
 /**
  * @brief CartesianImpedanceControl XBot RT Plugin
  *
@@ -57,19 +69,19 @@ protected:
 
 private:
 
-    void compute_error(MatrixXd &err);
-    void Rtoq(const KDL::Rotation &R, Eigen::Quaterniond& q);
+    void compute_error(Matrix<double, 12,1> &err);
 
     XBot::RobotInterface::Ptr _robot; 
     XBot::ModelInterface::Ptr _model;  
+    XBot::MatLogger::Ptr _logger;
 
     double _start_time;
 
-    XBot::MatLogger::Ptr _logger;
 
     // Gains and setpoints
     Matrix<double, 12, 12> _K;
     Matrix<double, 12, 1>  _setpoint;
+    EControlMode ControlMode = EControlMode::Idle;
 
     // Robot interface:
 
@@ -77,22 +89,17 @@ private:
     VectorXd _q;
     VectorXd _q0;
 
-    double xtmp, ytmp, ztmp, wtmp; // Temporal variables for copying of quaternion information
-    KDL::Frame _dPoseLeft;
-    KDL::Frame _dPoseRight;
-    Eigen::Quaterniond _dqLeft;
-    Eigen::Quaterniond _dqRight;
-    KDL::Frame _cPoseLeft;
-    KDL::Frame _cPoseRight;
-    Eigen::Quaterniond _cqLeft;
-    Eigen::Quaterniond _cqRight;
+    Eigen::Affine3d _dPoseLeft;
+    Eigen::Affine3d _dPoseRight;
+    Eigen::Affine3d _cPoseLeft;
+    Eigen::Affine3d _cPoseRight;
 
     // Error values:
-    Eigen::AngleAxisd _qerrLeft;
-    Eigen::AngleAxisd _qerrRight;
-    KDL::Vector _PerrLeft;
-    KDL::Vector _PerrRight;
-    Eigen::VectorXd _err;
+    Eigen::Matrix<double, 3,1> _wErrLeft;
+    Eigen::Matrix<double, 3,1> _pErrLeft;
+    Eigen::Matrix<double, 3,1> _wErrRight;
+    Eigen::Matrix<double, 3,1> _pErrRight;
+    Eigen::Matrix<double,12,1> _err;
 
     KDL::Jacobian   _J;   // Jacobian
     KDL::Jacobian   _Jinv;// Jacobian Inverse
@@ -100,9 +107,17 @@ private:
     Eigen::VectorXd _n;   // Non-linear term including centrifugal/coriolis/gravity
     Eigen::VectorXd _u;   // Joint Effort 
 
-    bool is_activated;
 
 };
+
+// Define Quaternion log:
+double sc = 0.0;
+double acos_val = 0.0;
+Quaterniond qtmp;
+Matrix<double, 3,1> qvec;
+void arccos_star(double& res, const double& rho);
+void Quaternionlog(Matrix<double, 3,1>& w, const Quaterniond& q, const Quaterniond& base);
+
 
 }
 

@@ -30,7 +30,6 @@ bool CartesianImpedanceControl::init_control_plugin(XBot::Handle::Ptr handle)
      * allocate memory on the heap, print stuff, ...
      * The RT plugin will be executed only if this init function returns true. */
 
-
     /* Save robot to a private member. */
     _robot = handle->getRobotInterface();
 
@@ -39,6 +38,15 @@ bool CartesianImpedanceControl::init_control_plugin(XBot::Handle::Ptr handle)
      * so that logs do not overwrite each other. */
 
     _logger = XBot::MatLogger::getLogger("/tmp/CartesianImpedanceControl_log");
+
+
+    // Set controller values:
+    _K.setIdentity();
+    _err.setZero();
+    _wErrLeft.setZero();
+    _pErrLeft.setZero();
+    _wErrRight.setZero();
+    _pErrRight.setZero();
 
     return true;
 
@@ -85,42 +93,51 @@ void CartesianImpedanceControl::control_loop(double time, double period)
 
     if(!current_command.str().empty()){
 
-        if(current_command.str() == "Activate"){
-            this->is_activated = true;
+        if (current_command.str() == "Impedance"){
+            ControlMode = EControlMode::Impedance;
         }
-
-        if(current_command.str() == "Deactivate"){
-            this->is_activated = false;
+        else if (current_command.str() == "GravityCompensate"){
+            ControlMode = EControlMode::GravityCompensate;
+        }
+        else {
+            ControlMode = EControlMode::Idle;
         }
 
     }
 
-    if (this->is_activated)
+    // Get values from model:
+    _model->syncFrom(*_robot);
+    _model->computeNonlinearTerm( _n);
+    _model->getInertiaMatrix( _M);
+    _model->getJacobian( "SomeLink", _J); // Determine which Jacobian this is, and which one we need
+
+    switch (ControlMode)
     {
+        case EControlMode::Idle:
+            // What is the best idle mode?
+            break;
 
-        // Update robot state
-        
-        // Get values from model:
-        _model->syncFrom(*_robot);
-        _model->computeNonlinearTerm( this->_n);
-        _model->getInertiaMatrix( this->_M);
-        _model->getJacobian( "SomeLink", this->_J); // Determine which Jacobian this is, and which one we need
+        case EControlMode::GravityCompensate:
+            _u = _n;
+            _model->setJointEffort(_u);
 
+            _robot->setReferenceFrom(*_model, XBot::Sync::Effort);
+            _robot->move();
+            break;
 
-        // Compute error:
+        case EControlMode::Impedance:
+            // Compute error:
+            compute_error(_err);
 
+            // Compute control command:
+            _u = _M*_Jinv.data*(_K*_err) + _n;
+            _model->setJointEffort(_u);
 
-        // Compute control command:
-        _u = _M*_Jinv.data*(_K*_err) + _n;
-        _model->setJointEffort(_u);
-
-
-        // Update robot state:
-        _robot->setReferenceFrom(*_model, XBot::Sync::Effort);
-        _robot->move();
-
-
+            _robot->setReferenceFrom(*_model, XBot::Sync::Effort);
+            _robot->move();
+            break;
     }
+
 }
 
 bool CartesianImpedanceControl::close()
@@ -139,49 +156,72 @@ CartesianImpedanceControl::~CartesianImpedanceControl()
   
 }
 
-void CartesianImpedanceControl::Rtoq(const KDL::Rotation &R, Eigen::Quaterniond& q)
+
+void CartesianImpedanceControl::compute_error(Matrix<double, 12,1>& err)
 {
-    //R.GetQuaternion(q.x, q.y, q.z, q.w);
-    R.GetQuaternion(xtmp, ytmp, ztmp, wtmp);
-    q = Eigen::Quaterniond(xtmp, ytmp, ztmp, wtmp);
-}
+    /* Compute control error
+     */ 
 
-void CartesianImpedanceControl::compute_error(MatrixXd & err)
-{
-    // Compute 
-    _model->getPose("source", "target", this->_cPoseLeft);  // left end-effector
-    _model->getPose("source", "target", this->_cPoseRight); // right right-endeffector
+    _model->getPose("source", "target", _cPoseLeft);  // left end-effector
+    _model->getPose("source", "target", _cPoseRight); // right right-endeffector
 
-    // Get quaternions:
-    Rtoq(this->_cPoseLeft.M, this->_cqLeft);
-    Rtoq(this->_dPoseLeft.M, this->_dqLeft);
-    Rtoq(this->_cPoseRight.M, this->_cqRight);
-    Rtoq(this->_dPoseRight.M, this->_dqRight);
+    // Compute errors (are these operations thread safe?)
+    // e.g. Quaterniond() will initialize a new object when called, or is this handled by the compiler?
+    _pErrLeft = _cPoseLeft.translation() - _dPoseLeft.translation(); 
+    Quaternionlog(_wErrLeft,  Quaterniond(_cPoseLeft.rotation()), 
+                              Quaterniond(_dPoseLeft.rotation()));
 
-    // Compute errors:
-    _qerrLeft = Eigen::AngleAxisd(_cqLeft.inverse()*_dqLeft);
-    _PerrLeft = _cPoseLeft.p - _dPoseLeft.p; 
-
-    _qerrRight = Eigen::AngleAxisd(_cqRight.inverse()*_dqRight);
-    _PerrRight = _cPoseRight.p - _dPoseRight.p; 
+    Quaternionlog(_wErrRight,  Quaterniond(_cPoseRight.rotation()), 
+                              Quaterniond(_dPoseRight.rotation()));
+    _pErrRight = _cPoseRight.translation() - _dPoseRight.translation(); 
     
     // Copy elements:
     for (int i=0;i++;i<3)
     {
-        err[i]   = _PerrLeft[i];
-        err[i+3] = _PerrLeft[i];
-        err[i+6] = _PerrRight[i];
-        err[i+9] = _PerrLeft[i];
+        err(i,0)  = _pErrLeft[i];
+        err(i+3,0)= _wErrLeft[i];
+        err(i+6,0)= _pErrRight[i];
+        err(i+9,0)= _wErrRight[i];
 
     }
-
-
-
-
-
-
-
-
 }
 
+
+void Quaternionlog(Matrix<double, 3,1>& w, const Quaterniond& q, const Quaterniond& base)
+{
+    /* Compute Quaternion logarithm
+     */
+    qtmp = base.inverse()*q; // Is this thread safe?
+
+    qvec(0) = qtmp.x();
+    qvec(1) = qtmp.y();
+    qvec(2) = qtmp.z();
+    sc      = qtmp.w();
+
+    if (std::abs(sc - 1.0) < 1e-6)
+    {
+        arccos_star(acos_val, sc);
+        w = acos_val*qvec.normalized();
+    }
+    else
+    {
+        w.setZero();
+    }
 }
+
+void arccos_star(double& res, const double& rho)
+{
+    /* Compute modified arccos, to ensure measuring minimum distance between 
+     * two orientations expressed as quaternions
+     */
+    if (-1.0 <= rho && rho < 0.0)
+    {
+        res = acos(rho) - PI;
+    }
+    else
+    {
+        res = acos(rho);
+    }
+}
+
+} // Close XBot Namespace
