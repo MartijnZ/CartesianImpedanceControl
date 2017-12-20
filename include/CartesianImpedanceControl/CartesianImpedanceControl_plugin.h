@@ -21,11 +21,17 @@
 #define CartesianImpedanceControl_PLUGIN_H_
 
 #include <XCM/XBotControlPlugin.h>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+#include <kdl/frames.hpp>
+#include <kdl/jacobian.hpp>
+#include <kdl/frames_io.hpp>
+#include <eigen_conversions/eigen_kdl.h>
 #include "ros/ros.h"
 
+using namespace Eigen;
 
 namespace XBotPlugin {
-
 /**
  * @brief CartesianImpedanceControl XBot RT Plugin
  *
@@ -51,13 +57,50 @@ protected:
 
 private:
 
-    XBot::RobotInterface::Ptr _robot;
+    void compute_error(MatrixXd &err);
+    void Rtoq(const KDL::Rotation &R, Eigen::Quaterniond& q);
+
+    XBot::RobotInterface::Ptr _robot; 
+    XBot::ModelInterface::Ptr _model;  
 
     double _start_time;
 
-    Eigen::VectorXd _q0;
-
     XBot::MatLogger::Ptr _logger;
+
+    // Gains and setpoints
+    Matrix<double, 12, 12> _K;
+    Matrix<double, 12, 1>  _setpoint;
+
+    // Robot interface:
+
+    // Joint velocity
+    VectorXd _q;
+    VectorXd _q0;
+
+    double xtmp, ytmp, ztmp, wtmp; // Temporal variables for copying of quaternion information
+    KDL::Frame _dPoseLeft;
+    KDL::Frame _dPoseRight;
+    Eigen::Quaterniond _dqLeft;
+    Eigen::Quaterniond _dqRight;
+    KDL::Frame _cPoseLeft;
+    KDL::Frame _cPoseRight;
+    Eigen::Quaterniond _cqLeft;
+    Eigen::Quaterniond _cqRight;
+
+    // Error values:
+    Eigen::AngleAxisd _qerrLeft;
+    Eigen::AngleAxisd _qerrRight;
+    KDL::Vector _PerrLeft;
+    KDL::Vector _PerrRight;
+    Eigen::VectorXd _err;
+
+    KDL::Jacobian   _J;   // Jacobian
+    KDL::Jacobian   _Jinv;// Jacobian Inverse
+    Eigen::MatrixXd _M;   // Mass Matrix
+    Eigen::VectorXd _n;   // Non-linear term including centrifugal/coriolis/gravity
+    Eigen::VectorXd _u;   // Joint Effort 
+
+    bool is_activated;
 
 };
 

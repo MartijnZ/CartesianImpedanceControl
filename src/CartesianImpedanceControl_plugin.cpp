@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2017 IIT-ADVR
- * Author:
- * email:
+ * Author: Martijn Zeestraten
+ * email: martijnzeestraten@gmail.com
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -57,6 +57,9 @@ void CartesianImpedanceControl::on_start(double time)
 
     /* Save the robot starting config to a class member */
     _start_time = time;
+    
+    /* Start rosnode
+     */
 }
 
 void CartesianImpedanceControl::on_stop(double time)
@@ -82,16 +85,42 @@ void CartesianImpedanceControl::control_loop(double time, double period)
 
     if(!current_command.str().empty()){
 
-        if(current_command.str() == "MY_COMMAND_1"){
-            /* Handle command */
+        if(current_command.str() == "Activate"){
+            this->is_activated = true;
         }
 
-        if(current_command.str() == "MY_COMMAND_2"){
-            /* Handle command */
+        if(current_command.str() == "Deactivate"){
+            this->is_activated = false;
         }
 
     }
 
+    if (this->is_activated)
+    {
+
+        // Update robot state
+        
+        // Get values from model:
+        _model->syncFrom(*_robot);
+        _model->computeNonlinearTerm( this->_n);
+        _model->getInertiaMatrix( this->_M);
+        _model->getJacobian( "SomeLink", this->_J); // Determine which Jacobian this is, and which one we need
+
+
+        // Compute error:
+
+
+        // Compute control command:
+        _u = _M*_Jinv.data*(_K*_err) + _n;
+        _model->setJointEffort(_u);
+
+
+        // Update robot state:
+        _robot->setReferenceFrom(*_model, XBot::Sync::Effort);
+        _robot->move();
+
+
+    }
 }
 
 bool CartesianImpedanceControl::close()
@@ -108,6 +137,51 @@ bool CartesianImpedanceControl::close()
 CartesianImpedanceControl::~CartesianImpedanceControl()
 {
   
+}
+
+void CartesianImpedanceControl::Rtoq(const KDL::Rotation &R, Eigen::Quaterniond& q)
+{
+    //R.GetQuaternion(q.x, q.y, q.z, q.w);
+    R.GetQuaternion(xtmp, ytmp, ztmp, wtmp);
+    q = Eigen::Quaterniond(xtmp, ytmp, ztmp, wtmp);
+}
+
+void CartesianImpedanceControl::compute_error(MatrixXd & err)
+{
+    // Compute 
+    _model->getPose("source", "target", this->_cPoseLeft);  // left end-effector
+    _model->getPose("source", "target", this->_cPoseRight); // right right-endeffector
+
+    // Get quaternions:
+    Rtoq(this->_cPoseLeft.M, this->_cqLeft);
+    Rtoq(this->_dPoseLeft.M, this->_dqLeft);
+    Rtoq(this->_cPoseRight.M, this->_cqRight);
+    Rtoq(this->_dPoseRight.M, this->_dqRight);
+
+    // Compute errors:
+    _qerrLeft = Eigen::AngleAxisd(_cqLeft.inverse()*_dqLeft);
+    _PerrLeft = _cPoseLeft.p - _dPoseLeft.p; 
+
+    _qerrRight = Eigen::AngleAxisd(_cqRight.inverse()*_dqRight);
+    _PerrRight = _cPoseRight.p - _dPoseRight.p; 
+    
+    // Copy elements:
+    for (int i=0;i++;i<3)
+    {
+        err[i]   = _PerrLeft[i];
+        err[i+3] = _PerrLeft[i];
+        err[i+6] = _PerrRight[i];
+        err[i+9] = _PerrLeft[i];
+
+    }
+
+
+
+
+
+
+
+
 }
 
 }

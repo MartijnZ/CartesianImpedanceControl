@@ -20,6 +20,9 @@
 # CMake 3.5.1 required 
 cmake_minimum_required(VERSION 3.5.1)
 
+#
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 # XBot RT Plugin
 project(CartesianImpedanceControl)
 
