@@ -101,8 +101,10 @@ private:
     Eigen::Matrix<double, 3,1> _pErrRight;
     Eigen::Matrix<double,12,1> _err;
 
-    KDL::Jacobian   _J;   // Jacobian
-    KDL::Jacobian   _Jinv;// Jacobian Inverse
+    Eigen::MatrixXd _J;   // Jacobian
+    Eigen::MatrixXd _J1;   // Jacobian
+    Eigen::MatrixXd _J2;   // Jacobian
+    Eigen::MatrixXd _Jinv;   // Jacobian
     Eigen::MatrixXd _M;   // Mass Matrix
     Eigen::VectorXd _n;   // Non-linear term including centrifugal/coriolis/gravity
     Eigen::VectorXd _u;   // Joint Effort 

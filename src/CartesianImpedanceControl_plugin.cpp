@@ -109,7 +109,8 @@ void CartesianImpedanceControl::control_loop(double time, double period)
     _model->syncFrom(*_robot);
     _model->computeNonlinearTerm( _n);
     _model->getInertiaMatrix( _M);
-    _model->getJacobian( "SomeLink", _J); // Determine which Jacobian this is, and which one we need
+    _model->getJacobian( "ft_arm1", _J1); // Determine which Jacobian this is, and which one we need
+    _model->getJacobian( "ft_arm2", _J2); // Determine which Jacobian this is, and which one we need
 
     switch (ControlMode)
     {
@@ -130,7 +131,7 @@ void CartesianImpedanceControl::control_loop(double time, double period)
             compute_error(_err);
 
             // Compute control command:
-            _u = _M*_Jinv.data*(_K*_err) + _n;
+            //_u = _M*_Jinv.data*(_K*_err) + _n;
             _model->setJointEffort(_u);
 
             _robot->setReferenceFrom(*_model, XBot::Sync::Effort);
@@ -162,8 +163,8 @@ void CartesianImpedanceControl::compute_error(Matrix<double, 12,1>& err)
     /* Compute control error
      */ 
 
-    _model->getPose("source", "target", _cPoseLeft);  // left end-effector
-    _model->getPose("source", "target", _cPoseRight); // right right-endeffector
+    _model->getPose("torso_2", "ft_arm1", _cPoseLeft);  // left end-effector
+    _model->getPose("torso_2", "ft_arm2", _cPoseRight); // right right-endeffector
 
     // Compute errors (are these operations thread safe?)
     // e.g. Quaterniond() will initialize a new object when called, or is this handled by the compiler?

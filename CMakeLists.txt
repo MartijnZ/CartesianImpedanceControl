@@ -60,6 +60,8 @@ include_directories(include/${PROJECT_NAME}
 add_library(${PROJECT_NAME} SHARED
     src/CartesianImpedanceControl_plugin.cpp
 )
+add_executable(${PROJECT_NAME}exe
+            src/simpletest.cpp)
 
 # set Xenomain flags if Xenomai is found
 if ( Xenomai_FOUND )
@@ -68,6 +70,7 @@ endif()
 
 # linking
 target_link_libraries(${PROJECT_NAME} ${XCM_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}exe ${XCM_LIBRARIES})
 
 #install
 ycm_library_install(${PROJECT_NAME} 1 0 0)
